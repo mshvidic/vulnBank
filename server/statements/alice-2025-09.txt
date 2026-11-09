@@ -1,0 +1,10 @@
+VULNBANK MONTHLY STATEMENT - SEPTEMBER 2025
+Customer: Alice Anders (alice)
+Account:  VB-1001-CHK (checking)
+
+2025-09-02  Dinner split         -120.00
+2025-09-05  Invoice 1042        +2500.00
+2025-09-11  Concert tickets       +45.50
+2025-09-30  Monthly savings     -1000.00
+
+Closing balance: 5230.50

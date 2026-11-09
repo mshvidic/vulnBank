@@ -1,0 +1,8 @@
+VULNBANK MONTHLY STATEMENT - OCTOBER 2025
+Customer: Carol Chen (carol)
+Account:  VB-3001-CHK (checking)
+
+2025-10-03  Equipment purchase  -9900.00
+2025-10-03  Equipment purchase  -9950.00
+
+Closing balance: 25000.00
