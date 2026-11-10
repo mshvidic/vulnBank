@@ -46,6 +46,26 @@ You can also register new users.
 
 Other endpoints: `POST /api/login`, `POST /api/register`, `POST /api/logout`, `GET /api/me`, `GET /api/transactions/:id`, `GET /api/debug/config`, `GET /api/redirect?to=`, `GET /api/health`.
 
+## Automated vulnerability tests
+
+`tests/security/auth-and-sessions.spec.ts` has automated tests for the "Authentication and sessions" flaws (#1–#7 in `VULNERABILITIES.md`): the SQL injection login bypass, user enumeration, missing rate limiting, unsalted MD5 password hashing, the weak password policy, the forgeable session token, and the insecure cookie flags.
+
+They're written with **[Playwright Test](https://playwright.dev/docs/test-intro)**, using its built-in `request` fixture to call the API directly (no browser needed, so they run in well under a second). It's a reasonable default if you haven't written this kind of test before: one tool for both this and any browser-based tests you add later, clear assertions, and a readable HTML report.
+
+Each test is a small, documented proof-of-concept: it exploits the flaw and asserts that the exploit worked. That means these tests currently **pass** on the vulnerable app, and are meant to start **failing** once you fix the underlying code — at which point they've done their job.
+
+```bash
+npm install
+npx playwright install   # only needed if you'll add browser-based tests later; these API tests don't use a browser
+npm run test:security
+```
+
+The config starts the API for you if it isn't already running. To watch what each test does, open the report after a run:
+
+```bash
+npx playwright show-report
+```
+
 ## Finding the flaws
 
 [`VULNERABILITIES.md`](VULNERABILITIES.md) lists every planted flaw with its OWASP category, location and a starting hint. **It contains spoilers**, so skip it if you want to hunt blind first. In the source, each flaw is also marked with a `FLAW:` comment (search for it in `server/index.js` and `src/`).
