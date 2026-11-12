@@ -52,7 +52,7 @@ jobs:
             const branch = context.ref_name;
 
             // Load external issue template file
-            const template = fs.readFileSync('.github/ISSUE_TEMPLATE/test-failure-template.md', 'utf8');
+            const template = fs.readFileSync('.github/ISSUE_TEMPLATE/test-failure-report-template.md', 'utf8');
 
             function getFailedTests(suites, currentFile = '') {
               let failed = [];
