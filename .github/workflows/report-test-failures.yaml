@@ -28,7 +28,9 @@ jobs:
 
       - name: Run Playwright Tests
         continue-on-error: true
-        run: npx playwright test --reporter=list --reporter=json=playwright-report.json
+        run: npx playwright test --reporter=list,json
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_FILE: playwright-report.json
 
       - name: Create Individual Issues for Failed Tests
         uses: actions/github-script@v7
