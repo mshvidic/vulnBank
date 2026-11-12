@@ -48,11 +48,14 @@ Other endpoints: `POST /api/login`, `POST /api/register`, `POST /api/logout`, `G
 
 ## Automated vulnerability tests
 
-`tests/security/auth-and-sessions.spec.ts` has automated tests for the "Authentication and sessions" flaws (#1–#7 in `VULNERABILITIES.md`): the SQL injection login bypass, user enumeration, missing rate limiting, unsalted MD5 password hashing, the weak password policy, the forgeable session token, and the insecure cookie flags.
+| Spec file | Flaws covered |
+| --- | --- |
+| `tests/security/auth-and-sessions.spec.ts` | #1–#7: SQL injection login bypass, user enumeration, missing rate limiting, password hash exposure, weak password policy, the forgeable session token, insecure cookie flags |
+| `tests/security/access-control.spec.ts` | #8–#13: IDOR on accounts/transactions, transferring from an account you don't own, mass assignment to become admin, missing admin-only checks, IDOR on statement downloads, CSRF on transfers |
 
 They're written with **[Playwright Test](https://playwright.dev/docs/test-intro)**, using its built-in `request` fixture to call the API directly (no browser needed, so they run in well under a second). It's a reasonable default if you haven't written this kind of test before: one tool for both this and any browser-based tests you add later, clear assertions, and a readable HTML report.
 
-Each test is a small, documented proof-of-concept: it exploits the flaw and asserts that the exploit worked. That means these tests currently **pass** on the vulnerable app, and are meant to start **failing** once you fix the underlying code — at which point they've done their job.
+Each test asserts the **secure** behaviour — what a fixed app should do — not what VulnBank currently does. That means every test in both files currently **fails**, and a failing test means the vulnerability is still present. Fix the corresponding flaw in `server/index.js` and its test should turn green; re-run the suite after any change to check you haven't reopened one. (A couple of tests accept more than one "correct" status code, e.g. `401` or `403`, since fixed implementations reasonably differ there.)
 
 ```bash
 npm install

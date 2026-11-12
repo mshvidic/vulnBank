@@ -1,37 +1,35 @@
 /**
- * Vulnerability tests for VulnBank's "Authentication and sessions" flaws (#1-#7 in
- * VULNERABILITIES.md). Each test proves a specific weakness is exploitable today.
+ * Security regression tests for VulnBank's "Authentication and sessions" flaws (#1-#7 in
+ * VULNERABILITIES.md). Each test asserts the SECURE behaviour (what a fixed app should do),
+ * not what the app currently does.
  *
- * These are not unit tests of correct behaviour — they are proof-of-concept exploits
- * written as automated checks, so you can re-run them after a fix and watch them fail
- * (which is how you'd know the fix worked). Read each test's comment before the fix,
- * and its assertion after.
+ * VulnBank is intentionally vulnerable, so **every test in this file currently fails**.
+ * That's the point: a failing test here means the vulnerability is still present. Fix the
+ * flaw in server/index.js and its test should turn green; once all tests here pass, these
+ * seven flaws are closed. Re-run after any change to check you haven't reopened one.
+ *
+ * Where the exact "correct" status code isn't a single obvious value (frameworks differ),
+ * a test accepts a small set of reasonable codes rather than one exact number.
  *
  * Demo users (reset every time the server restarts): admin/admin123, alice/password1.
  */
-import { createHash } from 'node:crypto';
 import { expect, test } from '@playwright/test';
 
-/** Mirrors VulnBank's (deliberately weak) password hashing, so tests can check it independently. */
-const md5 = (text: string) => createHash('md5').update(text).digest('hex');
-
 test.describe('#1 SQL injection in login', () => {
-  test('a crafted username bypasses the password check entirely', async ({ request }) => {
-    // The login query is built by string concatenation, so a username ending in `'--`
-    // comments out the rest of the SQL WHERE clause, including the password check.
+  test('a crafted username must not bypass the password check', async ({ request }) => {
+    // The login query is currently built by string concatenation, so a username ending in
+    // `'--` comments out the rest of the SQL WHERE clause, including the password check.
+    // A fixed, parameterised query should treat this as a literal (unknown) username.
     const response = await request.post('/api/login', {
-      data: { username: "admin'--", password: 'this value is never checked' },
+      data: { username: "admin'--", password: 'this is not the real password' },
     });
 
-    expect(response.status()).toBe(200);
-    const body = await response.json();
-    expect(body.user.username).toBe('admin');
-    expect(body.user.role).toBe('admin');
+    expect(response.status()).not.toBe(200);
   });
 });
 
 test.describe('#2 User enumeration', () => {
-  test('login error messages reveal whether a username exists', async ({ request }) => {
+  test('login error messages must not reveal whether a username exists', async ({ request }) => {
     const unknownUser = await request.post('/api/login', {
       data: { username: 'definitely-not-a-real-user', password: 'x' },
     });
@@ -39,77 +37,74 @@ test.describe('#2 User enumeration', () => {
       data: { username: 'alice', password: 'definitely-the-wrong-password' },
     });
 
-    // A secure login endpoint would return the same generic message either way.
+    // A secure login endpoint returns the same generic message either way, so an attacker
+    // can't use the error text to build a list of valid usernames.
     const unknownBody = await unknownUser.json();
     const wrongPasswordBody = await knownUserWrongPassword.json();
-    expect(unknownBody.error).not.toBe(wrongPasswordBody.error);
-    expect(wrongPasswordBody.error.toLowerCase()).toContain('password');
+    expect(unknownBody.error).toBe(wrongPasswordBody.error);
   });
 
-  test('registration confirms whether a username is already taken', async ({ request }) => {
+  test('registration must not confirm whether a username is already taken', async ({ request }) => {
     const response = await request.post('/api/register', {
       data: { username: 'alice', password: 'whatever123' }, // alice already exists
     });
 
-    expect(response.status()).toBe(409);
     const body = await response.json();
-    expect(body.error).toContain('alice'); // confirms the username, not just "that failed"
+    expect(body.error ?? '').not.toContain('alice'); // must not echo back the username
   });
 });
 
 test.describe('#3 No login rate limiting', () => {
-  test('many failed attempts in a row are never blocked or slowed down', async ({ request }) => {
-    const ATTEMPTS = 15;
+  test('repeated failed logins must eventually be rate-limited', async ({ request }) => {
+    // A throwaway account, so hammering it with failed logins (and potentially tripping a
+    // lockout that never resets) doesn't affect any other test's ability to log in as alice.
+    const username = `ratelimit_${Date.now()}`;
+    await request.post('/api/register', { data: { username, password: 'whatever123' } });
+
+    const ATTEMPTS = 20;
+    const statuses: number[] = [];
 
     for (let i = 0; i < ATTEMPTS; i++) {
       const guess = await request.post('/api/login', {
-        data: { username: 'alice', password: `wrong-guess-${i}` },
+        data: { username, password: `wrong-guess-${i}` },
       });
-      // A protected endpoint would eventually respond 429 (Too Many Requests) or similar.
-      // VulnBank just keeps answering 401, attempt after attempt.
-      expect(guess.status()).toBe(401);
+      statuses.push(guess.status());
     }
 
-    // The correct password still works immediately afterwards: no lockout was triggered.
-    const correctAttempt = await request.post('/api/login', {
-      data: { username: 'alice', password: 'password1' },
-    });
-    expect(correctAttempt.status()).toBe(200);
+    // A protected endpoint responds 429 (Too Many Requests) once an attacker sends enough
+    // failed attempts in a row. VulnBank currently answers 401 every single time.
+    expect(statuses).toContain(429);
   });
 });
 
 test.describe('#4 Weak password storage', () => {
-  test('passwords are hashed with unsalted MD5, so matching hashes reveal matching passwords', async ({
-    request,
-  }) => {
+  test('the password hash must never be returned to the client', async ({ request }) => {
     const response = await request.post('/api/login', { data: { username: 'admin', password: 'admin123' } });
     const body = await response.json();
 
-    // No salt: hashing the same password anywhere produces the exact same hash,
-    // which is what makes precomputed "rainbow table" cracking possible.
-    expect(body.user.password).toBe(md5('admin123'));
+    // Whether or not the hash is salted server-side, an API response should never include
+    // it at all — there is no legitimate reason for a client to receive it.
+    expect(body.user?.password).toBeUndefined();
   });
 });
 
 test.describe('#5 Weak password policy', () => {
-  test('a one-character password is accepted on registration', async ({ request }) => {
+  test('a one-character password must be rejected on registration', async ({ request }) => {
     const username = `weak_${Date.now()}`;
 
     const response = await request.post('/api/register', {
       data: { username, password: '1' },
     });
-    expect(response.status()).toBe(201);
 
-    // And that single-character password really does work for logging in.
-    const login = await request.post('/api/login', { data: { username, password: '1' } });
-    expect(login.status()).toBe(200);
+    expect(response.status()).toBe(400);
   });
 });
 
 test.describe('#6 Forgeable session token', () => {
-  test('a token can be hand-crafted to impersonate the admin, with no login at all', async ({ request }) => {
-    // The real token is just base64 of { id, username, role } — nothing signs or encrypts it.
-    // Forging one for the admin account needs no password and no server interaction.
+  test('a hand-crafted token must not be accepted', async ({ request }) => {
+    // The real token is just base64 of { id, username, role } — nothing signs or encrypts
+    // it, so anyone can construct one. A fixed implementation (e.g. a signed JWT) should
+    // reject this outright.
     const forgedClaims = { id: 1, username: 'admin', role: 'admin' };
     const forgedToken = Buffer.from(JSON.stringify(forgedClaims)).toString('base64');
 
@@ -117,42 +112,49 @@ test.describe('#6 Forgeable session token', () => {
       headers: { Authorization: `Bearer ${forgedToken}` },
     });
 
-    expect(response.status()).toBe(200);
-    const body = await response.json();
-    expect(body.username).toBe('admin');
-    expect(body.role).toBe('admin');
+    expect(response.status()).toBe(401);
   });
 
-  test('tampering with a real customer token promotes it to admin', async ({ request }) => {
+  test('tampering with a real token must not change the caller\'s privileges', async ({ request }) => {
     const login = await request.post('/api/login', { data: { username: 'alice', password: 'password1' } });
     const { token } = await login.json();
 
-    const claims = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
-    expect(claims.role).toBe('customer'); // alice really is a customer
-
-    claims.role = 'admin'; // tamper with the decoded token
-    const tamperedToken = Buffer.from(JSON.stringify(claims)).toString('base64');
+    // This naive edit only works while the token is still "just base64 JSON" (flaw #6), with
+    // no signature: decode it, flip the role, and re-encode. If a fix has changed the token's
+    // shape (e.g. a signed JWT), this decode will fail — which already proves the point, so the
+    // resulting garbled value is used as-is below and must still be rejected either way.
+    let tamperedToken = token;
+    try {
+      const claims = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
+      expect(claims.role).toBe('customer'); // alice really is a customer
+      claims.role = 'admin'; // tamper with the decoded token
+      tamperedToken = Buffer.from(JSON.stringify(claims)).toString('base64');
+    } catch {
+      // Not plain base64 JSON any more — the naive tamper step itself already failed.
+    }
 
     const response = await request.get('/api/admin/users', {
       headers: { Authorization: `Bearer ${tamperedToken}` },
     });
-    expect(response.status()).toBe(200); // the admin-only endpoint accepted it
+    // A signed/verified token would be rejected outright (401). If the server instead
+    // re-reads the user's real role from the database on every request, 403 is also fine
+    // here (the request is understood, just not permitted) — but 200 is a real compromise.
+    expect([401, 403]).toContain(response.status());
   });
 });
 
 test.describe('#7 Insecure session cookie', () => {
-  test('the login cookie is missing HttpOnly, Secure and SameSite', async ({ request }) => {
+  test('the login cookie must have HttpOnly, Secure and SameSite set', async ({ request }) => {
     const response = await request.post('/api/login', { data: { username: 'alice', password: 'password1' } });
 
-    const setCookie = response.headers()['set-cookie'] ?? '';
+    const setCookie = (response.headers()['set-cookie'] ?? '').toLowerCase();
     expect(setCookie).toContain('session=');
 
-    // Any one of these missing is a real weakness; VulnBank is missing all three:
     // - HttpOnly: without it, JavaScript (e.g. injected via an XSS flaw) can read the cookie.
     // - Secure: without it, the cookie can be sent over plain, unencrypted HTTP.
     // - SameSite: without it, other sites can trigger requests that carry this cookie (CSRF).
-    expect(setCookie.toLowerCase()).not.toContain('httponly');
-    expect(setCookie.toLowerCase()).not.toContain('secure');
-    expect(setCookie.toLowerCase()).not.toContain('samesite');
+    expect(setCookie).toContain('httponly');
+    expect(setCookie).toContain('secure');
+    expect(setCookie).toContain('samesite');
   });
 });
