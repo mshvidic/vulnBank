@@ -1,50 +1,97 @@
-name: Automated Bug Reporter on Test Failure
+name: Run Tests and Report Failures
 
 on:
   push:
-    branches: [ "main", "master" ]
-  pull_request:
-    branches: [ "main", "master" ]
-  workflow_dispatch:
+    branches:
+      - '**'
+
+permissions:
+  contents: read
+  issues: write
 
 jobs:
-  test-and-report:
+  test:
     runs-on: ubuntu-latest
-
-    permissions:
-      issues: write  # Required to allow GitHub Actions to create issues
-
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
+      
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: 18
 
-      - name: Install Dependencies
+      - name: Install dependencies
         run: npm ci
 
       - name: Install Playwright Browsers
         run: npx playwright install --with-deps
 
-      # Optional: Start your backend server here if it needs to run locally during tests
-      # - name: Start Vulnerable Server
-      #   run: npm start &
-      #   env:
-      #     PORT: 3000
-
       - name: Run Playwright Tests
-        id: playwright-tests
-        run: npx playwright test  # Runs all test files across the project
-        continue-on-error: true # Prevents the workflow from failing immediately so the issue creation step can run
+        continue-on-error: true
+        run: npx playwright test --reporter=json,list > playwright-report.json
 
-      - name: Create GitHub Issue on Test Failure
-        if: steps.playwright-tests.outcome == 'failure'
-        uses: JasonEtco/create-an-issue@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create Individual Issues for Failed Tests
+        uses: actions/github-script@v7
         with:
-          filename: .github/ISSUE_TEMPLATE/test-failure-report.md
+          script: |
+            const fs = require('fs');
+            
+            let report;
+            try {
+              report = JSON.parse(fs.readFileSync('playwright-report.json', 'utf8'));
+            } catch (e) {
+              console.log('Could not read playwright-report.json.');
+              return;
+            }
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const runUrl = `https://github.com/${owner}/${repo}/actions/runs/${context.runId}`;
+            const branch = context.ref_name;
+
+            // Load external issue template file
+            const template = fs.readFileSync('.github/ISSUE_TEMPLATE/test-failure-template.md', 'utf8');
+
+            function getFailedTests(suites, currentFile = '') {
+              let failed = [];
+              for (const suite of suites) {
+                const fileName = suite.file || currentFile;
+                if (suite.specs) {
+                  for (const spec of suite.specs) {
+                    for (const test of spec.tests) {
+                      if (test.results.some(r => r.status === 'failed' || r.status === 'timedOut')) {
+                        failed.push({ title: spec.title, file: fileName, line: spec.line });
+                      }
+                    }
+                  }
+                }
+                if (suite.suites) failed = failed.concat(getFailedTests(suite.suites, fileName));
+              }
+              return failed;
+            }
+
+            const failedTests = getFailedTests(report.suites || []);
+            const issues = await github.rest.issues.listForRepo({ owner, repo, state: 'open', labels: ['automated-test-failure'] });
+
+            for (const test of failedTests) {
+              const issueTitle = `🚨 Test Failure: ${test.title} (${test.file})`;
+              const exists = issues.data.find(i => i.title === issueTitle);
+
+              if (!exists) {
+                // Populate template placeholders with dynamic test values
+                const body = template
+                  .replace(/\$TEST_NAME/g, test.title)
+                  .replace(/\$SPEC_FILE/g, `${test.file}:${test.line}`)
+                  .replace(/\$BRANCH_NAME/g, branch)
+                  .replace(/\$RUN_URL/g, runUrl);
+
+                await github.rest.issues.create({
+                  owner,
+                  repo,
+                  title: issueTitle,
+                  body: body,
+                  labels: ['bug', 'automated-test-failure', 'security']
+                });
+                console.log(`Created issue for: ${test.title}`);
+              }
+            }
