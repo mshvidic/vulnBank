@@ -69,6 +69,16 @@ The config starts the API for you if it isn't already running. To watch what eac
 npx playwright show-report
 ```
 
+### 🤖 Automated GitHub Bug Reporting on Test Failure
+
+This repository is integrated with a GitHub Actions workflow that automatically creates a **GitHub Issue** whenever any test in the security suite fails. 
+
+- **How it works:** 
+  1. Whenever code is pushed or a pull request is opened, Playwright executes the security regression tests against VulnBank.
+  2. Because the application is intentionally vulnerable, failing tests indicate that a security flaw (such as #1–#13) is still present.
+  3. If any test fails, the workflow captures the failure report and automatically creates an issue directly in your GitHub repository.
+- **Requirements:** Ensure your repository has **Read and write permissions** enabled under *Settings > Actions > General > Workflow permissions* so the action can successfully create issues using `${{ secrets.GITHUB_TOKEN }}`.
+
 ## Finding the flaws
 
 [`VULNERABILITIES.md`](VULNERABILITIES.md) lists every planted flaw with its OWASP category, location and a starting hint. **It contains spoilers**, so skip it if you want to hunt blind first. In the source, each flaw is also marked with a `FLAW:` comment (search for it in `server/index.js` and `src/`).
