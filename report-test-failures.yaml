@@ -1,0 +1,50 @@
+name: Automated Bug Reporter on Test Failure
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  test-and-report:
+    runs-on: ubuntu-latest
+
+    permissions:
+      issues: write  # Required to allow GitHub Actions to create issues
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Install Playwright Browsers
+        run: npx playwright install --with-deps
+
+      # Optional: Start your backend server here if it needs to run locally during tests
+      # - name: Start Vulnerable Server
+      #   run: npm start &
+      #   env:
+      #     PORT: 3000
+
+      - name: Run Playwright Tests
+        id: playwright-tests
+        run: npx playwright test  # Runs all test files across the project
+        continue-on-error: true # Prevents the workflow from failing immediately so the issue creation step can run
+
+      - name: Create GitHub Issue on Test Failure
+        if: steps.playwright-tests.outcome == 'failure'
+        uses: JasonEtco/create-an-issue@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          filename: .github/ISSUE_TEMPLATE/test-failure-report.md
