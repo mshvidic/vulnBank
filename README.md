@@ -67,6 +67,8 @@ npx playwright install   # only needed if you'll add browser-based tests later; 
 npm run test:security
 ```
 
+## Allure report
+
 The config starts the API for you if it isn't already running. Each run also writes Allure results (`allure-results/`), so you can build a nicer report locally:
 
 ```bash
@@ -76,15 +78,7 @@ npm run allure:open       # or: npm run allure:serve (builds + opens in one step
 
 The Allure CLI needs a Java runtime on your machine; if you don't have one, `npx playwright show-report` still works and needs nothing extra.
 
-### Continuous integration
-
-[`.github/workflows/security-tests.yml`](.github/workflows/security-tests.yml) runs the whole suite on every push and pull request, then publishes the Allure report — with a trend graph across runs — to GitHub Pages via the `gh-pages` branch. The job still fails overall when a vulnerability is present (that's the point), but it always publishes the report first so you can see which tests failed and why.
-
-One-time setup after this is pushed to GitHub:
-
-1. **Settings → Actions → General → Workflow permissions**: select "Read and write permissions" (the workflow needs to push the `gh-pages` branch).
-2. After the workflow has run once (it creates the `gh-pages` branch): **Settings → Pages → Build and deployment → Source**: "Deploy from a branch", branch `gh-pages`, folder `/ (root)`.
-3. The report will then be at `https://<your-username>.github.io/<repo-name>/`.
+Test results are deployed to github page and also can be accessed after each run on page: https://mshvidic.github.io/vulnBank/
 
 ## Finding the flaws
 
