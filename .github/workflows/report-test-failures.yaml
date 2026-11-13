@@ -6,7 +6,7 @@ on:
       - '**'
 
 permissions:
-  contents: read
+  contents: write
   issues: write
 
 jobs:
@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -28,7 +28,7 @@ jobs:
 
       - name: Run Playwright Tests
         continue-on-error: true
-        run: npx playwright test --reporter=list,json
+        run: npx playwright test --reporter=list,json,allure-playwright
         env:
           PLAYWRIGHT_JSON_OUTPUT_FILE: playwright-report.json
 
@@ -37,7 +37,7 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            
+
             let report;
             try {
               report = JSON.parse(fs.readFileSync('playwright-report.json', 'utf8'));
@@ -49,6 +49,11 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const runUrl = `https://github.com/${owner}/${repo}/actions/runs/${context.runId}`;
+            // Note: this points at the Allure report for the latest run (Pages always serves
+            // the most recent publish), not one scoped to this specific failure. The report for
+            // THIS run is built and published by later steps in this same job, so the link below
+            // won't show this run's results until the job finishes — only a moment's delay.
+            const allureUrl = `https://${owner}.github.io/${repo}/`;
             const branch = context.ref_name;
 
             // Load external issue template file
@@ -85,7 +90,8 @@ jobs:
                   .replace(/\$TEST_NAME/g, test.title)
                   .replace(/\$SPEC_FILE/g, `${test.file}:${test.line}`)
                   .replace(/\$BRANCH_NAME/g, branch)
-                  .replace(/\$RUN_URL/g, runUrl);
+                  .replace(/\$RUN_URL/g, runUrl)
+                  .replace(/\$ALLURE_URL/g, allureUrl);
 
                 await github.rest.issues.create({
                   owner,
@@ -97,3 +103,28 @@ jobs:
                 console.log(`Created issue for: ${test.title}`);
               }
             }
+
+      - name: Check out previous report (for Allure history/trend)
+        if: always()
+        uses: actions/checkout@v4
+        continue-on-error: true
+        with:
+          ref: gh-pages
+          path: gh-pages
+
+      - name: Build Allure report
+        if: always()
+        uses: simple-elf/allure-report-action@v1.9
+        with:
+          allure_results: allure-results
+          allure_history: allure-history
+          gh_pages: gh-pages
+          keep_reports: 20
+
+      - name: Publish Allure report to GitHub Pages
+        if: always()
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: allure-history

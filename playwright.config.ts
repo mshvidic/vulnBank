@@ -6,7 +6,10 @@ export default defineConfig({
   testDir: './tests/security',
   fullyParallel: false, // these tests share the in-memory database, so they run in order
   workers: 1,
-  reporter: [['list']],
+  reporter: [
+    ['list'],
+    ['allure-playwright', { resultsDir: 'allure-results', detail: true, suiteTitle: false }],
+  ],
   timeout: 15_000,
 
   use: {

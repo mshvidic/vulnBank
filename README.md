@@ -55,23 +55,36 @@ Other endpoints: `POST /api/login`, `POST /api/register`, `POST /api/logout`, `G
 | `tests/security/injection-and-data-exposure.spec.ts` | #14–#19: password hashes exposed, SQL injection in the memo search, verbose errors, stored XSS in transfer memos and support tickets, path traversal on statement downloads |
 | `tests/security/business-logic.spec.ts` | #20–#21: negative transfer amounts, structuring (splitting a transfer to dodge the reporting threshold). #22 isn't tested separately — it's the combination of #11 and #21, see the file's header comment |
 
-They're written with **[Playwright Test](https://playwright.dev/docs/test-intro)**, using its built-in `request` fixture to call the API directly (no browser needed, so they run in well under a second).
+They're written with **[Playwright Test](https://playwright.dev/docs/test-intro)**, using its built-in `request` fixture to call the API directly (no browser needed, so they run in well under a second). It's a reasonable default if you haven't written this kind of test before: one tool for both this and any browser-based tests you add later, clear assertions, and a readable HTML report.
 
 The stored-XSS tests (#17, #18) check at the API level that the raw, executable markup doesn't come back as-is — a reasonable proxy, but not a complete proof, since a real fix could also live entirely in the React components. A browser-based test would close that gap; ask if you'd like one added.
 
-Each test asserts the **secure** behaviour — what a fixed app should do — not what VulnBank currently does. That means every test in both files currently **fails**, and a failing test means the vulnerability is still present. Fix the corresponding flaw in `server/index.js` and its test should turn green; re-run the suite after any change to check you haven't reopened one. (A couple of tests accept more than one "correct" status code, e.g. `401` or `403`, since fixed implementations reasonably differ there.)
+Each test asserts the **secure** behaviour — what a fixed app should do — not what VulnBank currently does. That means every test in all four spec files currently **fails**, and a failing test means the vulnerability is still present. Fix the corresponding flaw in `server/index.js` and its test should turn green; re-run the suite after any change to check you haven't reopened one. (A couple of tests accept more than one "correct" status code, e.g. `401` or `403`, since fixed implementations reasonably differ there.)
 
 ```bash
 npm install
-npx playwright install   # only needed if browser-based tests will be added later; these API tests don't use a browser
+npx playwright install   # only needed if you'll add browser-based tests later; these API tests don't use a browser
 npm run test:security
 ```
 
-The config starts the API for you if it isn't already running. To watch what each test does, open the report after a run:
+The config starts the API for you if it isn't already running. Each run also writes Allure results (`allure-results/`), so you can build a nicer report locally:
 
 ```bash
-npx playwright show-report
+npm run allure:generate   # writes a static report to allure-report/
+npm run allure:open       # or: npm run allure:serve (builds + opens in one step, no separate folder)
 ```
+
+The Allure CLI needs a Java runtime on your machine; if you don't have one, `npx playwright show-report` still works and needs nothing extra.
+
+### Continuous integration
+
+[`.github/workflows/security-tests.yml`](.github/workflows/security-tests.yml) runs the whole suite on every push and pull request, then publishes the Allure report — with a trend graph across runs — to GitHub Pages via the `gh-pages` branch. The job still fails overall when a vulnerability is present (that's the point), but it always publishes the report first so you can see which tests failed and why.
+
+One-time setup after this is pushed to GitHub:
+
+1. **Settings → Actions → General → Workflow permissions**: select "Read and write permissions" (the workflow needs to push the `gh-pages` branch).
+2. After the workflow has run once (it creates the `gh-pages` branch): **Settings → Pages → Build and deployment → Source**: "Deploy from a branch", branch `gh-pages`, folder `/ (root)`.
+3. The report will then be at `https://<your-username>.github.io/<repo-name>/`.
 
 ## Finding the flaws
 
@@ -88,7 +101,6 @@ server/
 ├── statements/      # sample statement files
 └── secrets/         # FAKE secrets, reachable through the path traversal flaw
 src/                 # React app (components for each page)
-tests/security       # Automated security test cases
 VULNERABILITIES.md   # catalog of planted flaws (spoilers)
 ```
 
