@@ -52,8 +52,12 @@ Other endpoints: `POST /api/login`, `POST /api/register`, `POST /api/logout`, `G
 | --- | --- |
 | `tests/security/auth-and-sessions.spec.ts` | #1–#7: SQL injection login bypass, user enumeration, missing rate limiting, password hash exposure, weak password policy, the forgeable session token, insecure cookie flags |
 | `tests/security/access-control.spec.ts` | #8–#13: IDOR on accounts/transactions, transferring from an account you don't own, mass assignment to become admin, missing admin-only checks, IDOR on statement downloads, CSRF on transfers |
+| `tests/security/injection-and-data-exposure.spec.ts` | #14–#19: password hashes exposed, SQL injection in the memo search, verbose errors, stored XSS in transfer memos and support tickets, path traversal on statement downloads |
+| `tests/security/business-logic.spec.ts` | #20–#21: negative transfer amounts, structuring (splitting a transfer to dodge the reporting threshold). #22 isn't tested separately — it's the combination of #11 and #21, see the file's header comment |
 
 They're written with **[Playwright Test](https://playwright.dev/docs/test-intro)**, using its built-in `request` fixture to call the API directly (no browser needed, so they run in well under a second). It's a reasonable default if you haven't written this kind of test before: one tool for both this and any browser-based tests you add later, clear assertions, and a readable HTML report.
+
+The stored-XSS tests (#17, #18) check at the API level that the raw, executable markup doesn't come back as-is — a reasonable proxy, but not a complete proof, since a real fix could also live entirely in the React components. A browser-based test would close that gap; ask if you'd like one added.
 
 Each test asserts the **secure** behaviour — what a fixed app should do — not what VulnBank currently does. That means every test in both files currently **fails**, and a failing test means the vulnerability is still present. Fix the corresponding flaw in `server/index.js` and its test should turn green; re-run the suite after any change to check you haven't reopened one. (A couple of tests accept more than one "correct" status code, e.g. `401` or `403`, since fixed implementations reasonably differ there.)
 
@@ -68,16 +72,6 @@ The config starts the API for you if it isn't already running. To watch what eac
 ```bash
 npx playwright show-report
 ```
-
-### 🤖 Automated GitHub Bug Reporting on Test Failure
-
-This repository is integrated with a GitHub Actions workflow that automatically creates a **GitHub Issue** whenever any test in the security suite fails. 
-
-- **How it works:** 
-  1. Whenever code is pushed or a pull request is opened, Playwright executes the security regression tests against VulnBank.
-  2. Because the application is intentionally vulnerable, failing tests indicate that a security flaw (such as #1–#13) is still present.
-  3. If any test fails, the workflow captures the failure report and automatically creates an issue directly in your GitHub repository.
-- **Requirements:** Ensure your repository has **Read and write permissions** enabled under *Settings > Actions > General > Workflow permissions* so the action can successfully create issues using `${{ secrets.GITHUB_TOKEN }}`.
 
 ## Finding the flaws
 
