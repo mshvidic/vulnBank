@@ -55,7 +55,7 @@ Other endpoints: `POST /api/login`, `POST /api/register`, `POST /api/logout`, `G
 | `tests/security/injection-and-data-exposure.spec.ts` | #14–#19: password hashes exposed, SQL injection in the memo search, verbose errors, stored XSS in transfer memos and support tickets, path traversal on statement downloads |
 | `tests/security/business-logic.spec.ts` | #20–#21: negative transfer amounts, structuring (splitting a transfer to dodge the reporting threshold). #22 isn't tested separately — it's the combination of #11 and #21, see the file's header comment |
 
-They're written with **[Playwright Test](https://playwright.dev/docs/test-intro)**, using its built-in `request` fixture to call the API directly (no browser needed, so they run in well under a second). It's a reasonable default if you haven't written this kind of test before: one tool for both this and any browser-based tests you add later, clear assertions, and a readable HTML report.
+They're written with **[Playwright Test](https://playwright.dev/docs/test-intro)**, using its built-in `request` fixture to call the API directly (no browser needed, so they run in well under a second).
 
 The stored-XSS tests (#17, #18) check at the API level that the raw, executable markup doesn't come back as-is — a reasonable proxy, but not a complete proof, since a real fix could also live entirely in the React components. A browser-based test would close that gap; ask if you'd like one added.
 
@@ -63,7 +63,7 @@ Each test asserts the **secure** behaviour — what a fixed app should do — no
 
 ```bash
 npm install
-npx playwright install   # only needed if you'll add browser-based tests later; these API tests don't use a browser
+npx playwright install   # only needed if browser-based tests will be added later; these API tests don't use a browser
 npm run test:security
 ```
 
@@ -88,6 +88,7 @@ server/
 ├── statements/      # sample statement files
 └── secrets/         # FAKE secrets, reachable through the path traversal flaw
 src/                 # React app (components for each page)
+tests/security       # Automated security test cases
 VULNERABILITIES.md   # catalog of planted flaws (spoilers)
 ```
 
