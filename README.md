@@ -54,12 +54,13 @@ Other endpoints: `POST /api/login`, `POST /api/register`, `POST /api/logout`, `G
 | `tests/security/access-control.spec.ts` | #8–#13: IDOR on accounts/transactions, transferring from an account you don't own, mass assignment to become admin, missing admin-only checks, IDOR on statement downloads, CSRF on transfers |
 | `tests/security/injection-and-data-exposure.spec.ts` | #14–#19: password hashes exposed, SQL injection in the memo search, verbose errors, stored XSS in transfer memos and support tickets, path traversal on statement downloads |
 | `tests/security/business-logic.spec.ts` | #20–#21: negative transfer amounts, structuring (splitting a transfer to dodge the reporting threshold). #22 isn't tested separately — it's the combination of #11 and #21, see the file's header comment |
+| `tests/security/misconfiguration.spec.ts` | #23–#26: unauthenticated debug endpoint, permissive CORS with credentials, open redirect, version banner and missing security headers |
 
 They're written with **[Playwright Test](https://playwright.dev/docs/test-intro)**, using its built-in `request` fixture to call the API directly (no browser needed, so they run in well under a second). It's a reasonable default if you haven't written this kind of test before: one tool for both this and any browser-based tests you add later, clear assertions, and a readable HTML report.
 
 The stored-XSS tests (#17, #18) check at the API level that the raw, executable markup doesn't come back as-is — a reasonable proxy, but not a complete proof, since a real fix could also live entirely in the React components. A browser-based test would close that gap; ask if you'd like one added.
 
-Each test asserts the **secure** behaviour — what a fixed app should do — not what VulnBank currently does. That means every test in all four spec files currently **fails**, and a failing test means the vulnerability is still present. Fix the corresponding flaw in `server/index.js` and its test should turn green; re-run the suite after any change to check you haven't reopened one. (A couple of tests accept more than one "correct" status code, e.g. `401` or `403`, since fixed implementations reasonably differ there.)
+Each test asserts the **secure** behaviour — what a fixed app should do — not what VulnBank currently does. That means every test in all five spec files currently **fails**, and a failing test means the vulnerability is still present. Fix the corresponding flaw in `server/index.js` and its test should turn green; re-run the suite after any change to check you haven't reopened one. (A couple of tests accept more than one "correct" status code, e.g. `401` or `403`, since fixed implementations reasonably differ there.)
 
 ```bash
 npm install
